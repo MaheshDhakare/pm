@@ -4,19 +4,123 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Shared Property</title>
-  <link rel="stylesheet" href="./share.css"/>
+
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:#f3f6fb;
+      color:#0f172a;
+    }
+    .wrap{max-width:720px;margin:0 auto;min-height:100vh;padding:12px}
+    .card{
+      background:#fff;
+      border-radius:16px;
+      padding:14px;
+      box-shadow:0 8px 22px rgba(0,0,0,.08);
+    }
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .pill{
+      padding:6px 10px;border-radius:999px;
+      background:#eff6ff;color:#1d4ed8;font-weight:800;font-size:12px
+    }
+    h1{
+      font-size:20px;
+      margin:6px 0 10px 0;
+      text-transform:capitalize;
+      line-height:1.25;
+    }
+    .meta{
+      font-size:15px;
+      opacity:.95;
+      margin-bottom:12px;
+    }
+    .sec{margin-top:14px}
+    .sec h2{
+      font-size:15px;
+      margin-bottom:8px;
+    }
+    #summary{
+      font-size:14px;
+      line-height:1.55;
+      white-space:pre-wrap;
+      background:#f8fafc;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:10px 12px;
+    }
+    .imgGrid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+    .imgGrid img{
+      width:100%;
+      height:92px;
+      border-radius:12px;
+      object-fit:cover;
+      border:1px solid #e5e7eb;
+      cursor:pointer;
+    }
+    .attList{display:flex;flex-direction:column;gap:10px}
+    .att{
+      display:flex;align-items:center;gap:10px;
+      padding:12px;border-radius:14px;border:1px solid #e5e7eb;
+      background:#fff;
+    }
+    .att .name{
+      font-weight:800;
+      font-size:14px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:55vw;
+    }
+    .att a{
+      margin-left:auto;
+      background:#1d4ed8;color:#fff;
+      padding:9px 12px;border-radius:12px;
+      font-size:13px;text-decoration:none;font-weight:900
+    }
+
+    /* Fullscreen image viewer */
+    .viewer{
+      position:fixed; inset:0; z-index:99999;
+      background:rgba(0,0,0,.85);
+      display:none;
+      place-items:center;
+      padding:12px;
+    }
+    .viewer img{
+      max-width:100%;
+      max-height:88vh;
+      border-radius:14px;
+      box-shadow:0 18px 55px rgba(0,0,0,.35);
+    }
+    .viewerClose{
+      position:fixed; top:14px; right:14px;
+      background:#fff;
+      border:0;
+      padding:10px 12px;
+      border-radius:999px;
+      font-weight:900;
+      cursor:pointer;
+    }
+
+    .empty{
+      opacity:.65;
+      font-size:13px;
+      padding:6px 0;
+    }
+  </style>
 </head>
+
 <body>
   <div class="wrap">
-    <header class="top">
-      <div class="brand">Property Manager</div>
-      <div class="subtitle" id="subtitle"></div>
-    </header>
-
     <main class="card">
       <div class="row">
-        <div class="pill" id="typePill"></div>
-        <div class="pill" id="catPill"></div>
+        <div class="pill" id="typePill" style="display:none;"></div>
+        <div class="pill" id="catPill" style="display:none;"></div>
       </div>
 
       <h1 id="title"></h1>
@@ -33,20 +137,131 @@
       <section class="sec" id="imgSec">
         <h2>Images</h2>
         <div class="imgGrid" id="imgGrid"></div>
+        <div class="empty" id="imgEmpty" style="display:none;">No images.</div>
       </section>
 
       <section class="sec" id="attSec">
         <h2>Attachments</h2>
-        <div id="attList"></div>
+        <div class="attList" id="attList"></div>
+        <div class="empty" id="attEmpty" style="display:none;">No attachments.</div>
       </section>
     </main>
-
-    <footer class="foot">
-      <button id="copyBtn">Copy Text</button>
-      <button id="openBtn">Open in Browser</button>
-    </footer>
   </div>
 
-  <script src="./share.js"></script>
+  <!-- Fullscreen image viewer -->
+  <div class="viewer" id="viewer">
+    <button class="viewerClose" id="viewerClose">✕</button>
+    <img id="viewerImg" src="" alt="preview"/>
+  </div>
+
+<script>
+  function qs(k){ return new URLSearchParams(location.search).get(k); }
+
+  function decodePayload(encoded){
+    try{
+      const raw = atob(encoded);
+      const json = decodeURIComponent(raw);
+      return JSON.parse(json);
+    }catch(e){
+      return null;
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s||'')
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#039;");
+  }
+
+  function safeText(v){ return String(v||'').trim(); }
+
+  (function init(){
+    const d = qs('d');
+    const payload = d ? decodePayload(d) : null;
+
+    if (!payload){
+      document.body.innerHTML = "<div style='padding:18px;font-weight:900;font-family:system-ui'>Invalid share link.</div>";
+      return;
+    }
+
+    // Basic data
+    document.getElementById('title').textContent = safeText(payload.title);
+    document.getElementById('area').textContent  = safeText(payload.area);
+    document.getElementById('summary').textContent = safeText(payload.summary);
+
+    // pills
+    const type = safeText(payload.type);
+    const cat  = safeText(payload.category);
+
+    const typePill = document.getElementById('typePill');
+    const catPill  = document.getElementById('catPill');
+
+    if (type) { typePill.textContent = type; typePill.style.display = "inline-flex"; }
+    if (cat)  { catPill.textContent  = cat;  catPill.style.display  = "inline-flex"; }
+
+    // Images (gallery)
+    const imgs = Array.isArray(payload.images) ? payload.images : [];
+    const imgSec = document.getElementById('imgSec');
+    const imgGrid = document.getElementById('imgGrid');
+    const imgEmpty = document.getElementById('imgEmpty');
+
+    if (!imgs.length){
+      imgGrid.innerHTML = "";
+      imgEmpty.style.display = "block";
+    } else {
+      imgGrid.innerHTML = imgs.map(src => `<img src="${escapeHtml(src)}" data-src="${escapeHtml(src)}" alt="image">`).join('');
+    }
+
+    // Attachments (Open button only - no src text)
+    const atts = Array.isArray(payload.attachments) ? payload.attachments : [];
+    const attList = document.getElementById('attList');
+    const attEmpty = document.getElementById('attEmpty');
+
+    if (!atts.length){
+      attList.innerHTML = "";
+      attEmpty.style.display = "block";
+    } else {
+      attList.innerHTML = atts.map((a, idx) => {
+        const name = escapeHtml(a?.name || ("Attachment " + (idx+1)));
+        const src  = escapeHtml(a?.src || "");
+        return `
+          <div class="att">
+            <div class="name">${name}</div>
+            <a href="${src}" target="_blank" rel="noopener">Open</a>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Fullscreen image viewer
+    const viewer = document.getElementById('viewer');
+    const viewerImg = document.getElementById('viewerImg');
+    const viewerClose = document.getElementById('viewerClose');
+
+    imgGrid.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t || t.tagName !== "IMG") return;
+      const src = t.getAttribute("data-src") || t.getAttribute("src");
+      if (!src) return;
+      viewerImg.src = src;
+      viewer.style.display = "grid";
+    });
+
+    function closeViewer(){
+      viewer.style.display = "none";
+      viewerImg.src = "";
+    }
+
+    viewerClose.addEventListener('click', closeViewer);
+    viewer.addEventListener('click', (e) => {
+      if (e.target === viewer) closeViewer();
+    });
+
+  })();
+</script>
+
 </body>
 </html>
