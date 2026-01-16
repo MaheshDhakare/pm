@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Shared Property</title>
+  <link rel="stylesheet" href="./share.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">Property Manager</div>
+      <div class="subtitle" id="subtitle"></div>
+    </header>
+
+    <main class="card">
+      <div class="row">
+        <div class="pill" id="typePill"></div>
+        <div class="pill" id="catPill"></div>
+      </div>
+
+      <h1 id="title"></h1>
+
+      <div class="meta">
+        <div><strong>Area:</strong> <span id="area"></span></div>
+      </div>
+
+      <section class="sec">
+        <h2>Summary</h2>
+        <div id="summary"></div>
+      </section>
+
+      <section class="sec" id="imgSec">
+        <h2>Images</h2>
+        <div class="imgGrid" id="imgGrid"></div>
+      </section>
+
+      <section class="sec" id="attSec">
+        <h2>Attachments</h2>
+        <div id="attList"></div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <button id="copyBtn">Copy Text</button>
+      <button id="openBtn">Open in Browser</button>
+    </footer>
+  </div>
+
+  <script src="./share.js"></script>
+</body>
+</html>
