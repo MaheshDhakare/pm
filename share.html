@@ -343,19 +343,47 @@
         const viewerImg = document.getElementById('viewerImg');
         const viewerClose = document.getElementById('viewerClose');
 
-        imgGrid.addEventListener('click', (e) => {
-          const t = e.target;
-          if (!t || t.tagName !== "IMG") return;
-          const src = t.getAttribute("data-src") || t.getAttribute("src");
-          if (!src) return;
-          viewerImg.src = src;
-          viewer.style.display = "grid";
-        });
+		let viewerOpen = false;
 
-        function closeViewer(){
-          viewer.style.display = "none";
-          viewerImg.src = "";
-        }
+		imgGrid.addEventListener('click', (e) => {
+		  const t = e.target;
+		  if (!t || t.tagName !== "IMG") return;
+
+		  const src = t.getAttribute("data-src") || t.getAttribute("src");
+		  if (!src) return;
+
+		  viewerImg.src = src;
+		  viewer.style.display = "grid";
+
+		  // ✅ Push a history entry so Back button closes viewer first
+		  if (!viewerOpen) {
+			viewerOpen = true;
+			history.pushState({ viewer: true }, "");
+		  }
+		});
+
+
+		function closeViewer(fromPopstate = false){
+		  viewer.style.display = "none";
+		  viewerImg.src = "";
+
+		  // ✅ If user closed by ✕ button, remove viewer history state
+		  if (viewerOpen && !fromPopstate) {
+			viewerOpen = false;
+			history.back(); 
+			// This will trigger popstate, but we'll ignore it properly
+		  } else {
+			viewerOpen = false;
+		  }
+		}
+
+		window.addEventListener('popstate', (event) => {
+		  if (viewerOpen) {
+			// ✅ Back button should close viewer, not exit page
+			closeViewer(true);
+		  }
+		});
+
 
         viewerClose.addEventListener('click', closeViewer);
         viewer.addEventListener('click', (e) => {
