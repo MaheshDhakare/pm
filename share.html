@@ -246,6 +246,15 @@
     if (ct) ct.style.display = "block";
   }
 
+  // ✅ Register Service Worker (Cache Supabase assets)
+  (function registerSW(){
+    try{
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.register('./sw.js')
+        .catch(err => console.warn('SW register failed', err));
+    }catch(e){}
+  })();
+
   (function init(){
     const sid = String(qs('sid') || '').trim();
 
@@ -261,7 +270,8 @@
         const jsonUrl =
           `https://mxuknvleveqqybhbhwnv.supabase.co/storage/v1/object/public/shares/${encodeURIComponent(jsonFile)}`;
 
-        const res = await fetch(jsonUrl, { cache: "no-store" });
+        // ✅ DO NOT use no-store, allow SW + browser caching
+        const res = await fetch(jsonUrl);
         if (!res.ok) throw new Error("Share JSON not found");
 
         const payload = await res.json();
@@ -356,15 +366,14 @@
         showContent();
 
       }catch(e){
-        // avoid loader stuck
         const ld = document.getElementById('pageLoader');
         if (ld) ld.style.display = "none";
-
         document.body.innerHTML = "<div style='padding:18px;font-weight:900;font-family:system-ui'>Invalid or expired share link.</div>";
       }
     })();
   })();
 </script>
+
 
 </body>
 </html>
