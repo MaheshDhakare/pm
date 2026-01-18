@@ -327,7 +327,26 @@
     }catch(e){ return null; }
   }
 
-  function showExpiredUI(sid){
+async function fetchFallbackContactFromServer(sid){
+  try{
+    const contactFile = `share_contact_${encodeURIComponent(sid)}.json`;
+    const contactUrl =
+      `https://mxuknvleveqqybhbhwnv.supabase.co/storage/v1/object/public/shares/${contactFile}`;
+
+    const r = await fetch(contactUrl);
+    if (!r.ok) return null;
+
+    const payload = await r.json();
+    if (!payload) return null;
+
+    return payload;
+  }catch(e){
+    return null;
+  }
+}
+
+
+  async function showExpiredUI(sid){
     // hide property sections
     const title = document.getElementById('title');
 	const metaBlock = document.querySelector('.meta');
@@ -352,9 +371,20 @@
 
     if (expiredSec) expiredSec.style.display = 'block';
 
-    const cached = getCachedShareContact(sid);
-    const name = safeText(cached?.shared_by);
-    const phone = safeText(cached?.shared_contact);
+	let cached = getCachedShareContact(sid);
+
+	// ✅ If no local cache, try fetch fallback contact json from server
+	if (!cached) {
+	  const serverFallback = await fetchFallbackContactFromServer(sid);
+	  if (serverFallback) {
+		cacheShareContact(sid, serverFallback);
+		cached = getCachedShareContact(sid);
+	  }
+	}
+
+	const name = safeText(cached?.shared_by);
+	const phone = safeText(cached?.shared_contact);
+
 
     if (expiredContact) {
       expiredContact.textContent = (name || phone) ? (name || 'Shared By') : 'Contact information not available.';
@@ -543,7 +573,8 @@
         if (ld) ld.style.display = "none";
 
         // ✅ show expired UI (keeps Ad section visible)
-        showExpiredUI(sid);
+        await showExpiredUI(sid);
+
       }
     })();
   })();
