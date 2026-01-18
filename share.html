@@ -212,20 +212,27 @@
       </main>
 
       <!-- ✅ Expired UI (hidden by default) -->
-      <section class="sec" id="expiredSec" style="display:none;">
-        <div class="card" style="padding:14px;border-radius:16px;">
-          <div style="font-weight:900;font-size:16px;margin-bottom:8px;">
-            This shared link is expired.
-          </div>
+	<section class="sec" id="expiredSec" style="display:none;">
+	  <div class="card" style="padding:14px;border-radius:16px;">
+		
+		<div style="font-weight:900;font-size:16px;margin-bottom:8px;">
+		  This shared link is expired.
+		</div>
 
-          <div id="expiredHint" style="opacity:.85;font-size:14px;line-height:1.45;">
-            To get details about the property you should contact:
-          </div>
+		<!-- ✅ NEW: Title line -->
+		<div id="expiredTitle"
+			 style="margin-top:6px;font-weight:900;font-size:15px;text-transform:capitalize;">
+		</div>
 
-          <div id="expiredContact" style="margin-top:10px;font-weight:900;font-size:15px;"></div>
-          <div id="expiredContact2" style="margin-top:6px;opacity:.85;font-size:14px;"></div>
-        </div>
-      </section>
+		<div id="expiredHint" style="opacity:.85;font-size:14px;line-height:1.45;margin-top:10px;">
+		  To get details about the property you can contact:
+		</div>
+
+		<div id="expiredContact" style="margin-top:10px;font-weight:900;font-size:15px;"></div>
+		<div id="expiredContact2" style="margin-top:6px;opacity:.85;font-size:14px;"></div>
+	  </div>
+	</section>
+
 
       <!-- ✅ Ad section BELOW the card (not inside it) -->
       <section class="sec" id="adSec">
@@ -255,10 +262,12 @@
 
 	function getUrlContact(){
 	  // ✅ read from URL, not cache
-	  const n = decodeSlug(qs('n'));
-	  const p = decodeSlug(qs('p'));
-	  return { name: n, phone: p };
+	  const t = decodeSlug(qs('t')); // title
+	  const n = decodeSlug(qs('n')); // name
+	  const p = decodeSlug(qs('p')); // phone
+	  return { title: t, name: n, phone: p };
 	}
+
 
   
 
@@ -342,49 +351,59 @@
     }catch(e){ return null; }
   }
 
-  function showExpiredUI(sid){
-    // hide property sections
-	const cardBlock = document.querySelector('.card');
-	if (cardBlock) cardBlock.style.display = 'none';
+function showExpiredUI(sid){
+  // ✅ hide main property card fully
+  const cardBlock = document.querySelector('main.card');
+  if (cardBlock) cardBlock.style.display = 'none';
 
-    // show expired section
-    const expiredSec = document.getElementById('expiredSec');
-    const expiredContact = document.getElementById('expiredContact');
-    const expiredContact2 = document.getElementById('expiredContact2');
+  // ✅ show expired section
+  const expiredSec = document.getElementById('expiredSec');
+  const expiredTitle = document.getElementById('expiredTitle');
+  const expiredContact = document.getElementById('expiredContact');
+  const expiredContact2 = document.getElementById('expiredContact2');
 
-    if (expiredSec) expiredSec.style.display = 'block';
+  if (expiredSec) expiredSec.style.display = 'block';
 
-	// ✅ Take from URL params
-	const fromUrl = getUrlContact();
-	const name = safeText(fromUrl.name);
-	const phone = safeText(fromUrl.phone);
+  // ✅ Take from URL params (title + name + phone)
+  const fromUrl = getUrlContact();
+  const title = safeText(fromUrl.title);
+  const name = safeText(fromUrl.name);
+  const phone = safeText(fromUrl.phone);
 
-
-    if (expiredContact) {
-      expiredContact.textContent = (name || phone) ? (name || 'Shared By') : 'Contact information not available.';
-    }
-	if (expiredContact2) {
-	  if (phone) {
-		expiredContact2.innerHTML = `
-		  <span>${escapeHtml(phone)}</span>
-		  <a
-			href="tel:${escapeHtml(String(phone).trim())}"
-			title="Call"
-			style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;
-				   margin-left:10px;"
-		  >
-			<i class="fa fa-phone" style="color:green;font-size:18px;"></i>
-		  </a>
-		`;
-	  } else {
-		expiredContact2.textContent = '';
-	  }
-	}
-
-
-    // ✅ show page even in expired mode so Ad remains visible
-    showContent();
+  // ✅ Show title
+  if (expiredTitle) {
+    expiredTitle.textContent = title ? `Title: ${title}` : '';
   }
+
+  // ✅ Show name/phone
+  if (expiredContact) {
+    expiredContact.textContent =
+      (name || phone) ? (name || 'Shared By') : 'Contact information not available.';
+  }
+
+  // ✅ Phone line with icon
+  if (expiredContact2) {
+    if (phone) {
+      expiredContact2.innerHTML = `
+        <span>${escapeHtml(phone)}</span>
+        <a
+          href="tel:${escapeHtml(String(phone).trim())}"
+          title="Call"
+          style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;
+                 margin-left:10px;"
+        >
+          <i class="fa fa-phone" style="color:green;font-size:18px;"></i>
+        </a>
+      `;
+    } else {
+      expiredContact2.textContent = '';
+    }
+  }
+
+  // ✅ show page even in expired mode so Ad remains visible
+  showContent();
+}
+
 
   (function init(){
     const sid = String(qs('sid') || '').trim();
