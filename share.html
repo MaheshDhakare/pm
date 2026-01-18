@@ -229,7 +229,7 @@
 		</div>
 
 		<div id="expiredContactRow"
-			 style="margin-top:10px;font-weight:900;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+			 style="margin-top:10px;font-weight:900;font-size:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
 		</div>
 
 	  </div>
@@ -263,13 +263,15 @@
 	}
 
 	// ✅ Convert slug back to readable text
-	// - only used for title + name
 	function unslugText(s){
 	  return String(s || '')
-		.replace(/-/g, ' ')     // hyphen → space
-		.replace(/\s{2,}/g, ' ') // cleanup multiple spaces
-		.trim();
+		.replace(/-/g, ' ')       // hyphen → space
+		.replace(/\s{2,}/g, ' ')  // cleanup multiple spaces
+		.trim()
+		.toLowerCase()
+		.replace(/\b\w/g, c => c.toUpperCase()); // ✅ first letter of each word
 	}
+
 
 	function getUrlContact(){
 	  // ✅ read from URL, not cache
