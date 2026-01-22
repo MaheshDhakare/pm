@@ -1,100 +1,82 @@
-/* sw.js - PropCola Share caching
-   Cache Supabase public storage assets:
-   - share JSON
-   - images, pdf, mp4, any file opened
+/* sw.js - PropCola Minimal Offline Shell v4
+   Purpose:
+   - Ensure share.html opens offline (app shell)
+   - Cache FontAwesome CDN CSS so UI icons work offline
+   Notes:
+   - All content (JSON/images/pdf/mp4/mp3) is handled by IndexedDB in share_everything_indexeddb.html
 */
 
-const CACHE_NAME = "propcola-share-v3";
+const CACHE_NAME = "propcola-shell-v4";
+const CORE_URLS = [
+  "./share.html",
+  "./",
+  "./sw.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+];
 
-// ✅ Supabase storage url matcher
-function isSupabasePublicStorage(url) {
-  try {
-    const u = new URL(url);
-    return (
-      u.hostname === "mxuknvleveqqybhbhwnv.supabase.co" &&
-      u.pathname.includes("/storage/v1/object/public/")
-    );
-  } catch (e) {
-    return false;
-  }
-}
-
-// ✅ Normalize request key so cache works even if URL has query params
-function normalizeRequest(req) {
-  const u = new URL(req.url);
-  const cleanUrl = u.origin + u.pathname; // drop ?query
-  return new Request(cleanUrl, {
-    method: "GET",
-    headers: req.headers
-  });
-}
-
-// Optional: limit cache size so it doesn't grow forever
-async function trimCache(maxItems = 150) {
-  const cache = await caches.open(CACHE_NAME);
-  const keys = await cache.keys();
-  if (keys.length <= maxItems) return;
-
-  const extra = keys.length - maxItems;
-  for (let i = 0; i < extra; i++) {
-    await cache.delete(keys[i]);
-  }
-}
-
-self.addEventListener("install", () => {
-  self.skipWaiting();
+self.addEventListener("install", (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(CORE_URLS.map(async (u) => {
+      try {
+        const res = await fetch(new Request(u, { cache: "reload" }));
+        if (res && res.ok) await cache.put(u, res);
+      } catch (e) {}
+    }));
+    self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    self.clients.claim();
-
-    // Cleanup old cache versions if changed
+    await self.clients.claim();
+    // remove old versions
     const keys = await caches.keys();
     await Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : null)));
   })());
 });
 
-// ✅ Cache strategy:
-// - Cache First for Supabase storage (fast + reduces bandwidth)
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
-  // only GET
-  if (req.method !== "GET") return;
+  // ✅ Offline navigation: return cached share.html
+  if (req.mode === "navigate") {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
 
-  const url = req.url;
-
-  // only handle supabase public storage
-  if (!isSupabasePublicStorage(url)) return;
-
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const key = normalizeRequest(req);
-
-    // 1) return cache if exists
-    const cached = await cache.match(key);
-    if (cached) return cached;
-
-    // 2) fetch from network
-    try {
-      const res = await fetch(req);
-
-      // only cache success responses
-      if (res && res.ok) {
+      // network first (for updates), cache fallback offline
+      try {
+        const res = await fetch(req);
         try {
-          await cache.put(key, res.clone());
-          trimCache(150);
+          const url = new URL(req.url);
+          if (url.origin === self.location.origin) {
+            await cache.put("./share.html", res.clone());
+          }
         } catch (e) {}
+        return res;
+      } catch (e) {
+        const cached = await cache.match("./share.html");
+        if (cached) return cached;
+        return new Response("Offline and share.html not cached yet.", { status: 503 });
       }
+    })());
+    return;
+  }
 
-      return res;
-    } catch (e) {
-      // offline and not cached
-      return new Response("Offline: file not cached yet.", {
-        status: 504,
-        statusText: "Gateway Timeout"
-      });
-    }
-  })());
+  // ✅ Cache-first for FontAwesome CSS
+  if (req.method === "GET" && req.url.includes("cdnjs.cloudflare.com/ajax/libs/font-awesome/")) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(req.url);
+      if (cached) return cached;
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) await cache.put(req.url, res.clone());
+        return res;
+      } catch (e) {
+        return cached || new Response("", { status: 504 });
+      }
+    })());
+    return;
+  }
 });
