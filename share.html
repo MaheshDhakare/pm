@@ -62,6 +62,7 @@
       object-fit:cover;
       border:1px solid #e5e7eb;
       cursor:pointer;
+      background:#e5e7eb;
     }
     .attList{display:flex;flex-direction:column;gap:10px}
     .att{
@@ -133,7 +134,7 @@
     .ad-title{font-weight:900;font-size:14px;margin-bottom:4px;}
     .ad-desc{opacity:.75;font-size:13px;line-height:1.35;}
 
-    /* Loader */
+    /* Loader overlay + hide content initially */
     #pageLoader{
       position:fixed;
       inset:0;
@@ -163,12 +164,14 @@
 
 <body>
 
+  <!-- Loader -->
   <div id="pageLoader">
     <div class="loaderSpin"></div>
     <div style="font-weight:900;font-family:system-ui;">Loading property...</div>
     <div style="opacity:.7;font-size:13px;">Please wait</div>
   </div>
 
+  <!-- Content -->
   <div id="pageContent">
     <div class="wrap">
       <main class="card">
@@ -206,6 +209,7 @@
         </section>
       </main>
 
+      <!-- Expired UI -->
       <section class="sec" id="expiredSec" style="display:none;">
         <div class="card" style="padding:14px;border-radius:16px;">
           <div style="font-weight:900;font-size:16px;margin-bottom:10px;">
@@ -226,6 +230,7 @@
         </div>
       </section>
 
+      <!-- Ad section -->
       <section class="sec" id="adSec">
         <div class="ad-placeholder">
           <div class="ad-badge">Ad</div>
@@ -242,9 +247,23 @@
     <img id="viewerImg" src="" alt="preview"/>
   </div>
 
-  <!-- Media Modal -->
+  <!-- Media Player Modal -->
   <div class="viewer" id="mediaViewer" style="display:none;">
-    <div id="mediaViewerBody" style="width:min(100%,720px);"></div>
+    <div id="mediaViewerBody" style="width:min(100%,720px);">
+      <!-- injected -->
+    </div>
+  </div>
+
+  <!-- PDF Viewer Modal -->
+  <div class="viewer" id="pdfViewer" style="display:none;">
+    <div style="width:min(100%,900px);height:90vh;background:#fff;border-radius:14px;overflow:hidden;">
+      <iframe id="pdfFrame" src="" style="width:100%;height:100%;border:0;"></iframe>
+      <div style="padding:10px;display:flex;gap:10px;justify-content:flex-end;background:#f8fafc;border-top:1px solid #e5e7eb;">
+        <button id="closePdfBtn" style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">
+          Close
+        </button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -291,9 +310,11 @@
       .map(s => s.replace(/^[\s•\-\*\u2022]+/, '').trim());
 
     if (!items.length) return '';
-    return `<ul style="margin:0; padding-left:20px; list-style-type:disc;">` +
+    return (
+      `<ul style="margin:0; padding-left:20px; list-style-type:disc;">` +
       items.map(line => `<li style="margin:0 0 3px 0;">${escapeHtml(line)}</li>`).join('') +
-      `</ul>`;
+      `</ul>`
+    );
   }
 
   function safeText(v){ return String(v||'').trim(); }
@@ -305,14 +326,17 @@
     if (ct) ct.style.display = "block";
   }
 
+  // Ask browser for persistent storage
   async function requestPersistence(){
     try{
       if (navigator.storage && navigator.storage.persist){
-        await navigator.storage.persist();
+        return await navigator.storage.persist();
       }
     }catch(e){}
+    return false;
   }
 
+  // IndexedDB store (ALL files)
   const MEDIA_DB = "propcola_share_media_v1";
   const MEDIA_STORE = "files";
 
@@ -381,57 +405,79 @@
     return obj;
   }
 
-  function guessFileType(url, mime){
+  function guessExtType(url, mime){
     const u = String(url || '').toLowerCase();
-    if (mime && mime.startsWith("video/")) return "video";
-    if (mime && mime.startsWith("audio/")) return "audio";
-    if (u.includes(".mp4")) return "video";
-    if (u.includes(".webm")) return "video";
-    if (u.includes(".mp3")) return "audio";
-    if (u.includes(".wav")) return "audio";
-    if (u.includes(".m4a")) return "audio";
+    if (mime && mime.startsWith("image/")) return "image";
+    if (mime === "application/pdf") return "pdf";
+
+    if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/i.test(u)) return "image";
+    if (/\.(pdf)(\?|$)/i.test(u)) return "pdf";
+    if (/\.(mp4|webm)(\?|$)/i.test(u)) return "video";
+    if (/\.(mp3|wav|m4a)(\?|$)/i.test(u)) return "audio";
     return "file";
   }
+
+  async function getOrDownloadBlobUrl(src){
+    const key = normalizeMediaKey(src);
+    let obj = await idbGet(key);
+    if (!obj || !obj.blob){
+      obj = await downloadAndStoreBlob(src);
+    }
+    return { blobUrl: URL.createObjectURL(obj.blob), mime: obj.type || "" };
+  }
+
+  // =========================================
+  // Modals: Media Viewer
+  // =========================================
+  let mediaViewerOpen = false;
 
   function openMediaModal(htmlContent){
     const mv = document.getElementById("mediaViewer");
     const body = document.getElementById("mediaViewerBody");
     if (!mv || !body) return;
+
     body.innerHTML = htmlContent;
     mv.style.display = "grid";
-    history.pushState({ mediaViewer: true }, "");
+
+    if (!mediaViewerOpen){
+      mediaViewerOpen = true;
+      history.pushState({ mediaViewer: true }, "");
+    }
   }
 
-  function closeMediaModal(fromPop = false){
+  function closeMediaModal(fromPopstate = false){
     const mv = document.getElementById("mediaViewer");
     const body = document.getElementById("mediaViewerBody");
     if (!mv || !body) return;
+
     mv.style.display = "none";
     body.innerHTML = "";
-    if (!fromPop) history.back();
+
+    if (mediaViewerOpen && !fromPopstate) {
+      mediaViewerOpen = false;
+      history.back();
+    } else {
+      mediaViewerOpen = false;
+    }
   }
 
   function wireMediaViewer(){
     const mv = document.getElementById("mediaViewer");
-    if (mv) mv.addEventListener("click", (e)=>{ if (e.target === mv) closeMediaModal(false); });
+
+    if (mv) mv.addEventListener("click", (e)=>{
+      if (e.target === mv) closeMediaModal(false);
+    });
 
     window.addEventListener("popstate", ()=>{
-      const mv2 = document.getElementById("mediaViewer");
-      if (mv2 && mv2.style.display === "grid"){
+      if (mediaViewerOpen){
         closeMediaModal(true);
       }
     });
   }
 
   async function openOfflineMedia(url){
-    const key = normalizeMediaKey(url);
-    let obj = await idbGet(key);
-    if (!obj || !obj.blob){
-      obj = await downloadAndStoreBlob(url);
-    }
-
-    const blobUrl = URL.createObjectURL(obj.blob);
-    const kind = guessFileType(url, obj.type);
+    const { blobUrl, mime } = await getOrDownloadBlobUrl(url);
+    const kind = guessExtType(url, mime);
 
     if (kind === "video"){
       openMediaModal(`
@@ -439,15 +485,20 @@
                style="width:100%;max-height:78vh;border-radius:14px;background:#000;"
                src="${blobUrl}"></video>
         <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="closeMediaBtn" style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">Close</button>
+          <button id="closeMediaBtn"
+                  style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">
+            Close
+          </button>
         </div>
       `);
     } else if (kind === "audio"){
       openMediaModal(`
         <audio controls autoplay style="width:100%;" src="${blobUrl}"></audio>
         <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
-          <a href="${blobUrl}" download style="background:#111827;color:#fff;padding:10px 12px;border-radius:12px;text-decoration:none;font-weight:900;">Download</a>
-          <button id="closeMediaBtn" style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">Close</button>
+          <button id="closeMediaBtn"
+                  style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">
+            Close
+          </button>
         </div>
       `);
     } else {
@@ -461,41 +512,77 @@
     }, 0);
   }
 
-  // ✅ Register SW (shell only)
+  // =========================================
+  // PDF Modal
+  // =========================================
+  let pdfOpen = false;
+
+  function openPdfModal(blobUrl){
+    const pv = document.getElementById("pdfViewer");
+    const frame = document.getElementById("pdfFrame");
+    if (!pv || !frame) return;
+
+    frame.src = blobUrl;
+    pv.style.display = "grid";
+
+    if (!pdfOpen){
+      pdfOpen = true;
+      history.pushState({ pdfViewer:true }, "");
+    }
+  }
+
+  function closePdfModal(fromPop=false){
+    const pv = document.getElementById("pdfViewer");
+    const frame = document.getElementById("pdfFrame");
+    if (!pv || !frame) return;
+
+    pv.style.display = "none";
+    frame.src = "";
+
+    if (pdfOpen && !fromPop){
+      pdfOpen = false;
+      history.back();
+    } else {
+      pdfOpen = false;
+    }
+  }
+
+  (function wirePdfViewer(){
+    const pv = document.getElementById("pdfViewer");
+    const closeBtn = document.getElementById("closePdfBtn");
+
+    if (closeBtn) closeBtn.onclick = ()=> closePdfModal(false);
+
+    if (pv) pv.addEventListener("click", (e)=>{
+      if (e.target === pv) closePdfModal(false);
+    });
+
+    window.addEventListener("popstate", ()=>{
+      if (pdfOpen) closePdfModal(true);
+    });
+  })();
+
+  // Register Service Worker (optional but fine)
   (function registerSW(){
     try{
       if (!('serviceWorker' in navigator)) return;
       navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('SW register failed', err));
+        .catch(()=>{});
     }catch(e){}
   })();
 
+  // Cache share contact
   function cacheShareContact(sid, payload){
     try{
-      const obj = {
+      localStorage.setItem(`share_contact_${sid}`, JSON.stringify({
         shared_by: safeText(payload?.shared_by),
         shared_contact: safeText(payload?.shared_contact),
         cached_at: Date.now()
-      };
-      localStorage.setItem(`share_contact_${sid}`, JSON.stringify(obj));
+      }));
     }catch(e){}
   }
 
-  function saveSharePayload(sid, payload){
-    try{
-      localStorage.setItem(`share_payload_${sid}`, JSON.stringify({ payload, t: Date.now() }));
-    }catch(e){}
-  }
-
-  function loadSharePayload(sid){
-    try{
-      const raw = localStorage.getItem(`share_payload_${sid}`);
-      if (!raw) return null;
-      const obj = JSON.parse(raw);
-      return obj?.payload || null;
-    }catch(e){ return null; }
-  }
-
+  // Expired UI
   function showExpiredUI(sid){
     const cardBlock = document.querySelector('main.card');
     if (cardBlock) cardBlock.style.display = 'none';
@@ -503,7 +590,6 @@
     const expiredSec = document.getElementById('expiredSec');
     const expiredTitle = document.getElementById('expiredTitle');
     const expiredContactRow = document.getElementById('expiredContactRow');
-
     if (expiredSec) expiredSec.style.display = 'block';
 
     const fromUrl = getUrlContact();
@@ -520,7 +606,8 @@
           ${phone ? `<span style="opacity:0.7;"> - </span><span style="font-weight:800;">${escapeHtml(phone)}</span>` : ''}
           ${
             phone
-              ? `<a href="tel:${escapeHtml(String(phone).trim())}" title="Call"
+              ? `<a href="tel:${escapeHtml(String(phone).trim())}"
+                   title="Call"
                    style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">
                    <i class="fa fa-phone" style="color:green;font-size:18px;"></i>
                  </a>`
@@ -535,10 +622,25 @@
     showContent();
   }
 
-  // ============================================================
-  // ✅ FIX: renderFromPayload added (offline-first requires this)
-  // ============================================================
-  function renderFromPayload(payload){
+  // JSON payload cache
+  function saveSharePayload(sid, payload){
+    try{
+      localStorage.setItem(`share_payload_${sid}`, JSON.stringify({ payload, t: Date.now() }));
+    }catch(e){}
+  }
+  function loadSharePayload(sid){
+    try{
+      const raw = localStorage.getItem(`share_payload_${sid}`);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj?.payload || null;
+    }catch(e){ return null; }
+  }
+
+  // =========================================
+  // Render Function (Reusable)
+  // =========================================
+  async function renderFromPayload(payload){
     document.getElementById('title').textContent = safeText(payload.title);
     document.getElementById('area').textContent  = safeText(payload.area);
     document.getElementById('summary').innerHTML = summaryToBullets(payload.summary);
@@ -556,7 +658,8 @@
         ${sc ? `<span style="opacity:0.7;"> - </span><span>${escapeHtml(sc)}</span>` : ''}
         ${
           sc
-            ? `<a href="tel:${escapeHtml(String(sc).trim())}" title="Call Publisher"
+            ? `<a href="tel:${escapeHtml(String(sc).trim())}"
+                 title="Call Publisher"
                  style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;margin-left:10px;">
                  <i class="fa fa-phone" style="color:green;font-size:18px;"></i>
                </a>`
@@ -573,7 +676,7 @@
     if (type) { typePill.textContent = type; typePill.style.display = "inline-flex"; }
     if (cat)  { catPill.textContent  = cat;  catPill.style.display  = "inline-flex"; }
 
-    // Images
+    // Images (render placeholders first, then swap to blob URLs)
     const imgs = Array.isArray(payload.images) ? payload.images : [];
     const imgSec  = document.getElementById('imgSec');
     const imgGrid = document.getElementById('imgGrid');
@@ -582,9 +685,23 @@
       if (imgSec) imgSec.style.display = "none";
     } else {
       if (imgSec) imgSec.style.display = "block";
-      imgGrid.innerHTML = imgs.map(src =>
-        `<img src="${escapeHtml(src)}" data-src="${escapeHtml(src)}" alt="image">`
+      imgGrid.innerHTML = imgs.map((src, i) =>
+        `<img src="" data-src="${escapeHtml(src)}" data-i="${i}" alt="image">`
       ).join('');
+
+      // Load blob URLs (no Supabase URL shown)
+      setTimeout(async ()=>{
+        const list = imgGrid.querySelectorAll("img[data-src]");
+        for (const im of list){
+          const src = im.getAttribute("data-src");
+          if (!src) continue;
+          try{
+            const { blobUrl } = await getOrDownloadBlobUrl(src);
+            im.src = blobUrl;
+            im.setAttribute("data-blob", blobUrl);
+          }catch(e){}
+        }
+      },0);
     }
 
     // Attachments
@@ -599,42 +716,71 @@
       attList.innerHTML = atts.map((a, idx) => {
         const name = escapeHtml(a?.name || ("Attachment " + (idx+1)));
         const src  = escapeHtml(a?.src || "");
+        const isMedia = (/\.(mp4|webm|mp3|wav|m4a)(\?|$)/i.test(src));
         return `
           <div class="att">
             <div class="name">${name}</div>
             ${
-              (/\.(mp4|webm|mp3|wav|m4a)(\?|$)/i.test(src))
+              isMedia
                 ? `<button class="openMediaBtn" data-src="${src}"
-                     style="margin-left:auto;background:#1d4ed8;color:#fff;padding:9px 12px;border-radius:12px;
-                            font-size:13px;border:0;font-weight:900;cursor:pointer;">Play</button>`
-                : `<a href="${src}" target="_blank" rel="noopener">Open</a>`
+                    style="margin-left:auto;background:#1d4ed8;color:#fff;padding:9px 12px;border-radius:12px;
+                           font-size:13px;border:0;font-weight:900;cursor:pointer;">Play</button>`
+                : `<button class="openFileBtn" data-src="${src}"
+                    style="margin-left:auto;background:#1d4ed8;color:#fff;padding:9px 12px;border-radius:12px;
+                           font-size:13px;border:0;font-weight:900;cursor:pointer;">Open</button>`
             }
           </div>
         `;
       }).join('');
     }
 
-    // wire media buttons
+    // Wire media buttons
     wireMediaViewer();
+
     if (attList){
-      attList.onclick = (e) => {
-        const btn = e.target && e.target.closest ? e.target.closest(".openMediaBtn") : null;
-        if (!btn) return;
-        const src = btn.getAttribute("data-src");
-        if (src) openOfflineMedia(src).catch(()=>alert("Media not cached yet."));
-      };
+      attList.addEventListener('click', (e) => {
+        const mediaBtn = e.target && e.target.closest ? e.target.closest(".openMediaBtn") : null;
+        if (mediaBtn){
+          const src = mediaBtn.getAttribute("data-src");
+          if (!src) return;
+          openOfflineMedia(src).catch(()=>alert("This media is not cached yet. Please open once with internet."));
+          return;
+        }
+      });
+
+      // File buttons (PDF included)
+      attList.addEventListener("click", async (e)=>{
+        const fileBtn = e.target && e.target.closest ? e.target.closest(".openFileBtn") : null;
+        if (!fileBtn) return;
+        const src = fileBtn.getAttribute("data-src");
+        if (!src) return;
+
+        try{
+          const { blobUrl, mime } = await getOrDownloadBlobUrl(src);
+          const kind = guessExtType(src, mime);
+
+          if (kind === "pdf"){
+            openPdfModal(blobUrl);
+            return;
+          }
+
+          window.open(blobUrl, "_blank", "noopener");
+        }catch(err){
+          alert("File not cached yet. Please open once with internet.");
+        }
+      });
     }
 
-    // Fullscreen image viewer wiring
+    // Fullscreen image viewer
     const viewer = document.getElementById('viewer');
     const viewerImg = document.getElementById('viewerImg');
     const viewerClose = document.getElementById('viewerClose');
     let viewerOpen = false;
 
-    imgGrid.onclick = (e) => {
+    imgGrid.addEventListener('click', (e) => {
       const t = e.target;
       if (!t || t.tagName !== "IMG") return;
-      const src = t.getAttribute("data-src") || t.getAttribute("src");
+      const src = t.getAttribute("data-blob") || t.getAttribute("src") || t.getAttribute("data-src");
       if (!src) return;
 
       viewerImg.src = src;
@@ -644,7 +790,7 @@
         viewerOpen = true;
         history.pushState({ viewer: true }, "");
       }
-    };
+    });
 
     function closeViewer(fromPopstate = false){
       viewer.style.display = "none";
@@ -657,17 +803,19 @@
       }
     }
 
-    window.onpopstate = () => {
+    window.addEventListener('popstate', () => {
       if (viewerOpen) closeViewer(true);
-    };
+    });
 
-    viewerClose.onclick = closeViewer;
-    viewer.onclick = (e) => { if (e.target === viewer) closeViewer(); };
+    viewerClose.addEventListener('click', closeViewer);
+    viewer.addEventListener('click', (e) => {
+      if (e.target === viewer) closeViewer();
+    });
   }
 
-  // ============================================================
-  // ✅ MAIN INIT
-  // ============================================================
+  // =========================================
+  // Main init
+  // =========================================
   (function init(){
     const sid = String(qs('sid') || '').trim();
 
@@ -678,10 +826,10 @@
 
     (async function(){
       try{
-        // ✅ OFFLINE-FIRST: if cached, never hit Supabase
+        // OFFLINE-FIRST: render cached payload immediately
         const cachedPayload = loadSharePayload(sid);
-        if (cachedPayload) {
-          renderFromPayload(cachedPayload);
+        if (cachedPayload){
+          await renderFromPayload(cachedPayload);
           showContent();
           return;
         }
@@ -693,36 +841,40 @@
         if (!res.ok) throw new Error("Share JSON not found");
 
         const payload = await res.json();
-        if (!payload) throw new Error("Invalid JSON payload");
 
         requestPersistence();
 
-        // ✅ Cache payload for offline-first
+        // Cache payload + shared info
         saveSharePayload(sid, payload);
         cacheShareContact(sid, payload);
 
-        // ✅ Store MP4/MP3 in IndexedDB (do not render anything here)
+        // Cache EVERYTHING to IDB:
+        // images + attachments (pdf/video/audio/images)
         (async () => {
           try{
-            const mediaUrls = [
+            const urls = [
+              ...(Array.isArray(payload.images) ? payload.images : []),
               ...(Array.isArray(payload.attachments) ? payload.attachments.map(a => a?.src).filter(Boolean) : [])
-            ].filter(u => /\.(mp4|webm|mp3|wav|m4a)(\?|$)/i.test(String(u)));
+            ].filter(Boolean);
 
-            for (const u of mediaUrls){
+            const filtered = urls.filter(u =>
+              /\.(mp4|webm|mp3|wav|m4a|pdf|png|jpg|jpeg|webp|gif)(\?|$)/i.test(String(u))
+            );
+
+            for (const u of filtered){
               try{ await downloadAndStoreBlob(u); }catch(e){}
             }
           }catch(e){}
         })();
 
-        // ✅ render
-        renderFromPayload(payload);
+        await renderFromPayload(payload);
         showContent();
 
       }catch(e){
-        // ✅ fallback: if cached exists use it
+        // fallback to cached payload
         const cachedPayload = loadSharePayload(sid);
-        if (cachedPayload) {
-          renderFromPayload(cachedPayload);
+        if (cachedPayload){
+          await renderFromPayload(cachedPayload);
           showContent();
           return;
         }
