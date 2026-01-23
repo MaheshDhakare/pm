@@ -470,14 +470,14 @@
     if (kind === "video"){
       openMediaModal(`
         <video controls autoplay playsinline
-               style="width:100%;max-height:78vh;border-radius:14px;background:#000;"
+               style="width:100%;max-height:90vh;border-radius:14px;background:#000;"
                src="${blobUrl}"></video>
-        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+<!--         <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
           <button id="closeMediaBtn"
                   style="border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;">
             Close
           </button>
-        </div>
+        </div> -->
       `);
     } else if (kind === "audio"){
       openMediaModal(`
