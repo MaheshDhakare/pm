@@ -644,26 +644,33 @@
 	  const locBox = document.getElementById('location');
 	  if (!locSec || !locBox) return;
 
-	  const rawLoc = safeText(payload.location);
+	  const mapUrl = safeText(payload.location);
 
-	  if (!rawLoc && !mapUrl) {
+	  if (!mapUrl) {
 		locSec.style.display = "none";
 		return;
 	  }
 
-	  let finalUrl = rawLoc;
-
-	  locBox.innerHTML = `
-		<a href="${escapeHtml(finalUrl)}"
-		   target="_blank"
-		   rel="noopener noreferrer"
-		   style="color:#2563eb;font-weight:700;text-decoration:underline;">
-		  📍 ${escapeHtml(rawLoc || 'View Location')}
-		</a>
-	  `;
+	locBox.innerHTML = `
+	  <a href="${escapeHtml(mapUrl)}"
+		 target="_blank"
+		 rel="noopener noreferrer"
+		 style="
+		   color:#2563eb;
+		   font-weight:700;
+		   text-decoration:underline;
+		   display:inline-flex;
+		   align-items:center;
+		   gap:6px;
+		 ">
+		<i class="fa fa-map-marker-alt"></i>
+		Click to view location on map
+	  </a>
+	`;
 
 	  locSec.style.display = "block";
 	})();
+
 
 
     // Shared By
