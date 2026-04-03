@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>My Account - PropCola</title>
+
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="images/App_Logo.png" class="logo"/>
+      <div class="brand-text">
+        <h1 class="site-title">PropCola</h1>
+        <small class="muted">Your Account</small>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <button id="logoutBtn" class="btn ghost">Logout</button>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="container" style="margin-top:90px;">
+
+  <!-- ACCOUNT INFO -->
+  <div class="card">
+    <h3>Your Account</h3>
+
+    <p><strong>Name:</strong> 
+      <span id="userName" class="muted">Loading...</span>
+    </p>
+
+    <p><strong>Email:</strong> 
+      <span id="userEmail" class="muted">Loading...</span>
+    </p>
+  </div>
+
+  <!-- PLAN SECTION -->
+  <div class="card" style="margin-top:20px;">
+    <h3>Your Plan</h3>
+
+    <p id="currentPlan" class="muted">
+      Checking your plan...
+    </p>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+      <button id="buyPlanBtn" class="btn primary">
+        Upgrade Plan
+      </button>
+
+      <button id="managePlanBtn" class="btn secondary">
+        Manage Subscription
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+
+// 🔑 USE SAME KEYS AS YOUR PROJECT
+const SUPABASE_URL = window.SUPABASE_URL;
+const SUPABASE_KEY = window.SUPABASE_ANON_KEY;
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// =========================
+// LOAD USER SESSION
+// =========================
+async function loadUser() {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error || !data?.session) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  const user = data.session.user;
+
+  document.getElementById("userEmail").innerText = user.email;
+  document.getElementById("userName").innerText =
+    user.user_metadata?.name || "User";
+
+  loadPlan(user.id);
+}
+
+// =========================
+// LOAD PLAN FROM SUPABASE
+// =========================
+async function loadPlan(userId) {
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("plan_name, plan_status")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data) {
+    document.getElementById("currentPlan").innerText =
+      "Free Plan (No active subscription)";
+    return;
+  }
+
+  const planName = data.plan_name || "Free";
+  const status = data.plan_status || "inactive";
+
+  let statusText = "";
+
+  if (status === "active") {
+    statusText = "🟢 Active";
+  } else if (status === "expired") {
+    statusText = "🔴 Expired";
+  } else {
+    statusText = "⚪ Free";
+  }
+
+  document.getElementById("currentPlan").innerText =
+    `${planName} Plan - ${statusText}`;
+}
+
+// =========================
+// LOGOUT
+// =========================
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await supabase.auth.signOut();
+  window.location.href = "index.html";
+});
+
+// =========================
+// BUY PLAN (RAZORPAY READY)
+// =========================
+document.getElementById("buyPlanBtn").addEventListener("click", () => {
+
+  // 🔥 NEXT STEP: call backend to create subscription
+  alert("Razorpay integration will start here");
+
+});
+
+// =========================
+// MANAGE PLAN
+// =========================
+document.getElementById("managePlanBtn").addEventListener("click", () => {
+
+  // 🔥 NEXT: show cancel / pause / details
+  alert("Manage subscription coming soon");
+
+});
+
+// INIT
+loadUser();
+
+</script>
+
+</body>
+</html>
